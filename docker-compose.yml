@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./:/app
+    environment:
+      - CHURN_MODEL_PATH=/app/models/artifacts/churn_model.pkl
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:

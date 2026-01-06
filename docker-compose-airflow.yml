@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-airflow:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+      AIRFLOW__CORE__UNIT_TEST_MODE: 'True'
+      AIRFLOW_HOME: /opt/airflow
+      PYTHONPATH: /opt/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./:/opt/airflow
+      - /opt/airflow/__pycache__
+    command: >
+      bash -c "
+      echo 'Waiting for Postgres to be ready...';
+      sleep 10;
+      echo 'Initializing Airflow DB...';
+      airflow db init;
+      echo 'Creating admin user...';
+      airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin 2>/dev/null || echo 'Admin user already exists';
+      echo 'Init complete!'
+      "
+    profiles: ["do-not-start"]
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+      AIRFLOW__CORE__UNIT_TEST_MODE: 'False'
+      AIRFLOW_HOME: /opt/airflow
+      PYTHONPATH: /opt/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./:/opt/airflow
+      - /opt/airflow/__pycache__
+    command: >
+      bash -c "
+      sleep 15 &&
+      airflow db init &&
+      airflow scheduler
+      "
+    restart: unless-stopped
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    environment:
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'False'
+      AIRFLOW__CORE__UNIT_TEST_MODE: 'False'
+      AIRFLOW_HOME: /opt/airflow
+      PYTHONPATH: /opt/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./:/opt/airflow
+      - /opt/airflow/__pycache__
+    ports:
+      - '8080:8080'
+    command: >
+      bash -c "
+      sleep 15 &&
+      airflow db init &&
+      airflow webserver
+      "
+    restart: unless-stopped
+
+volumes:
+  postgres-airflow:
